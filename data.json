@@ -1,0 +1,183 @@
+{
+  "transactions": [],
+  "products": [
+    {
+      "sku": "VF1000CC",
+      "nombre": "Vaso de aluminio de 1000cc litro",
+      "controlaStock": true
+    },
+    {
+      "sku": "VF700CC",
+      "nombre": "Vaso de aluminio de 700cc litro",
+      "controlaStock": true
+    },
+    {
+      "sku": "VF500CC",
+      "nombre": "Vaso de aluminio de 500cc litro",
+      "controlaStock": true
+    },
+    {
+      "sku": "VT550CC",
+      "nombre": "Vaso de aluminio de 550cc litro",
+      "controlaStock": true
+    },
+    {
+      "sku": "MATS",
+      "nombre": "Mate tipo Stanley",
+      "controlaStock": true
+    },
+    {
+      "sku": "MATV",
+      "nombre": "Mate tipo Vasito",
+      "controlaStock": true
+    },
+    {
+      "sku": "BOMB01",
+      "nombre": "Bombilla plana",
+      "controlaStock": true
+    },
+    {
+      "sku": "LLAV01",
+      "nombre": "Llavero destapador de aluminio",
+      "controlaStock": true
+    },
+    {
+      "sku": "CVF1000",
+      "nombre": "Caja Vaso fernetero 1000cc",
+      "controlaStock": false
+    },
+    {
+      "sku": "CVF700",
+      "nombre": "Caja Vaso fernetero 700cc",
+      "controlaStock": false
+    },
+    {
+      "sku": "SERVICIO",
+      "nombre": "Servicio de Grabado/Corte",
+      "controlaStock": false
+    },
+    {
+      "sku": "OTROS",
+      "nombre": "Otro Producto",
+      "controlaStock": false
+    }
+  ],
+  "stocks": [
+    {
+      "sku": "VF1000CC",
+      "nombre": "Vaso de aluminio de 1000cc litro",
+      "cantidad": 0,
+      "minStock": 10
+    },
+    {
+      "sku": "VF700CC",
+      "nombre": "Vaso de aluminio de 700cc litro",
+      "cantidad": 0,
+      "minStock": 10
+    },
+    {
+      "sku": "VF500CC",
+      "nombre": "Vaso de aluminio de 500cc litro",
+      "cantidad": 0,
+      "minStock": 10
+    },
+    {
+      "sku": "VT550CC",
+      "nombre": "Vaso de aluminio de 550cc litro",
+      "cantidad": 0,
+      "minStock": 10
+    },
+    {
+      "sku": "MATS",
+      "nombre": "Mate tipo Stanley",
+      "cantidad": 0,
+      "minStock": 10
+    },
+    {
+      "sku": "MATV",
+      "nombre": "Mate tipo Vasito",
+      "cantidad": 0,
+      "minStock": 10
+    },
+    {
+      "sku": "BOMB01",
+      "nombre": "Bombilla plana",
+      "cantidad": 0,
+      "minStock": 10
+    },
+    {
+      "sku": "LLAV01",
+      "nombre": "Llavero destapador de aluminio",
+      "cantidad": 0,
+      "minStock": 10
+    }
+  ],
+  "config": {
+    "sheetUrl": "",
+    "suppliers": [
+      "ChatGPT",
+      "Google Workspace",
+      "Creative Fabrica",
+      "Canva",
+      "Claro Telefonia",
+      "Movistar Telefonia",
+      "Internet",
+      "Edenor",
+      "Licencias",
+      "ARCA",
+      "TiendaNube",
+      "Facebook",
+      "Mercado Libre",
+      "Varios",
+      "Trello",
+      "Correo/Envios",
+      "Limpieza"
+    ],
+    "paymentMethods": [
+      "Efectivo",
+      "Mercado Pago Laserbeam",
+      "Mercado Pago Laserbeam2",
+      "Pendiente Cobro"
+    ],
+    "vendors": [
+      "Julian",
+      "Elias",
+      "German"
+    ],
+    "accountsIngresos": [
+      "Ventas",
+      "Otros Ingresos"
+    ],
+    "accountsEgresos": [
+      "Costos Operativos",
+      "Costos No Operativos",
+      "Servicios",
+      "Impuestos"
+    ],
+    "imputablesIngresos": [
+      "Venta Fábrica",
+      "Ventas LaserBeam",
+      "Otros Ingresos"
+    ],
+    "imputablesEgresos": [
+      "Materia Prima LaserBeam",
+      "Materia Prima Fábrica",
+      "Servicios/Suscrip.",
+      "Viáticos",
+      "Contador",
+      "Sueldos",
+      "Publicidad",
+      "Consumibles",
+      "Ajuste Cuentas",
+      "Infra Estructura",
+      "Monotributo Julian",
+      "Monotributo Carla",
+      "Monotributo Edith",
+      "Impuestos Municipales",
+      "Tienda Online",
+      "Logística",
+      "Reserva Taller",
+      "Otros Egresos"
+    ]
+  }
+}

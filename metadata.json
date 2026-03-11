@@ -1,0 +1,7 @@
+{
+  "name": "LaserBeam CRM Manager",
+  "description": "Sistema de gestión integral para LaserBeam: control de ventas, egresos, stock automatizado por SKU y analítica visual con asistente IA.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
