@@ -81,8 +81,44 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // Data Fixing Logic
+  const fixData = () => {
+    const data = readData();
+    const validPhones = [
+      '5491126459408',
+      '5491136801718',
+      '5491134771785',
+      '5491134385172',
+      '5491158159249',
+      '5492323531706'
+    ];
+
+    const normalize = (phone: string) => phone.replace(/[^0-9]/g, '');
+
+    let changed = false;
+    data.transactions = data.transactions.map((tx: any) => {
+      if (tx.etapa === 'Máquina/Producción') {
+        const normalizedPhone = normalize(tx.cliente || '');
+        if (!validPhones.includes(normalizedPhone)) {
+          tx.etapa = 'Completado';
+          tx.estado = 'Completado';
+          changed = true;
+        }
+      }
+      return tx;
+    });
+
+    if (changed) {
+      writeData(data);
+      console.log('Data fixed: Moved unauthorized transactions from Máquina/Producción to Completado');
+    }
+  };
+
+  fixData();
+
   app.use(cors());
-  app.use(bodyParser.json());
+  app.use(bodyParser.json({ limit: '10mb' }));
+  app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
 
   // API Routes
   app.get("/api/data", (req, res) => {
@@ -161,6 +197,35 @@ async function startServer() {
     data.config = { ...data.config, ...newConfig };
     writeData(data);
     res.json({ status: 'ok', message: 'Config updated' });
+  });
+
+  app.post("/api/importTransactions", (req, res) => {
+    const { transactions } = req.body;
+    if (!Array.isArray(transactions)) return res.status(400).json({ status: 'error', message: 'Transactions array missing' });
+
+    const data = readData();
+    // We append new transactions, but we should check for duplicate IDs if they have them
+    // Or just replace the whole list if the user wants a clean start.
+    // Let's just append and ensure unique IDs if not provided.
+    transactions.forEach((tx: any) => {
+      if (!tx.id) tx.id = `import_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const index = data.transactions.findIndex((t: any) => t.id === tx.id);
+      if (index >= 0) {
+        data.transactions[index] = { ...data.transactions[index], ...tx };
+      } else {
+        data.transactions.push(tx);
+      }
+    });
+
+    writeData(data);
+    res.json({ status: 'ok', message: `${transactions.length} transactions imported` });
+  });
+
+  app.post("/api/clearTransactions", (req, res) => {
+    const data = readData();
+    data.transactions = [];
+    writeData(data);
+    res.json({ status: 'ok', message: 'All transactions cleared' });
   });
 
   app.get("/api/backup", (req, res) => {

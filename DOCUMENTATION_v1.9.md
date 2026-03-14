@@ -28,6 +28,11 @@ Se ajustó el tamaño de las tarjetas a un punto medio:
 - Mantiene una legibilidad superior al diseño "mini" anterior.
 - Optimización de paddings y tamaños de fuente para maximizar el área de trabajo útil.
 
+### 5. Importación y Gestión de Datos
+- **Importar desde Planillas**: En la sección de Configuración > Importar, se puede pegar directamente un rango de celdas de Excel o Google Sheets.
+- **Mapeo Automático**: El sistema reconoce las columnas si se incluye una fila de encabezado con los nombres técnicos de las columnas (ej: `numeroOrden`, `fecha`, `total`, etc.).
+- **Vista Compacta**: La tabla de Movimientos ahora utiliza `whitespace-nowrap` para evitar saltos de línea, manteniendo la información en una sola fila por registro para una mejor lectura rápida.
+
 ## Versiones
 - **App Version**: 1.3.0
 - **UI Version**: v1.9 (Funcional)

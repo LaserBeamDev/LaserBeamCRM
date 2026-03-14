@@ -2,7 +2,12 @@
 # LaserBeam CRM - Registro de Cambios
 
 ## [funcional_v1.9] - 2026-03-11
+### Nuevo
+- **Importación Masiva**: Nueva pestaña en Configuración para importar datos directamente desde Google Sheets o Excel mediante copiar/pegar.
+- **Limpieza de Datos**: Opción para vaciar la base de datos de movimientos desde la configuración.
+
 ### Mejorado
+- **Layout de Movimientos**: Se eliminaron los saltos de línea en la tabla de movimientos para una vista más compacta y profesional.
 - **Inversión de Jerarquía Visual**: En tarjetas de Producción y Logística, el número de OT ahora es el protagonista (grande y negrita) y el cliente es secundario.
 - **Fechas de Entrega Detalladas**: Se añadió la fecha exacta de entrega en las tarjetas de producción, junto al contador de días restantes.
 - **Identidad Visual de Transportes**: Se asignaron colores corporativos específicos a los medios de envío (Andreani: Rojo, Via Cargo: Verde Lima, Correo Argentino: Amarillo, Uber: Negro, Taller: Verde Oscuro, Expreso: Violeta).

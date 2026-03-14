@@ -1,9 +1,10 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Transaction, SKUCode, TransactionItem, EtapaProduccion, AppConfig, TransactionType, AccountType } from './types';
 import { CONCEPTOS, ESTADOS, ETAPAS_PRODUCCION, MEDIOS_ENVIO } from './constants';
-import { LayoutDashboard, Plus, ShoppingCart, Package, TrendingUp, Edit3, Database, Search, Download, MessageSquare, ChevronLeft, ChevronRight, Truck, Check, MapPin } from './components/Icons';
+import { LayoutDashboard, Plus, ShoppingCart, Package, TrendingUp, TrendingDown, Edit3, Database, Search, Download, MessageSquare, ChevronLeft, ChevronRight, Truck, Check, MapPin } from './components/Icons';
 import AIChat from './components/AIChat';
+import MercadoPagoImporter from './components/MercadoPagoImporter';
 import { useLaserBeam } from './hooks/useLaserBeam';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 
@@ -51,7 +52,8 @@ const App: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { 
     transactions, products, currentStocks, stats, config, isSyncing, 
-    addTransaction, updateTransaction, deleteTransaction, updateTransactionEtapa, reorderTransactions, updateBaseStock, addProduct, setConfig, updateConfigList, fetchFromCloud, downloadBackup
+    addTransaction, updateTransaction, deleteTransaction, updateTransactionEtapa, reorderTransactions, updateBaseStock, addProduct, setConfig, updateConfigList, fetchFromCloud, downloadBackup,
+    importTransactions, clearTransactions
   } = useLaserBeam();
 
   const [editingStock, setEditingStock] = useState<SKUCode | null>(null);
@@ -76,7 +78,7 @@ const App: React.FC = () => {
               <span className="text-[#64748b] text-[8px] font-bold uppercase tracking-[0.25em]">diseño + corte laser</span>
             </div>
           </div>
-          <span className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.3em] ml-1">CRM Manager v1.9 (Funcional)</span>
+          <span className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.3em] ml-1">CRM Manager v2.0 (Estable)</span>
         </div>
         
         <div className="flex flex-col gap-2">
@@ -87,7 +89,7 @@ const App: React.FC = () => {
           <NavItem icon={<TrendingUp />} label="Inventario" active={activeTab === 'stock'} onClick={() => {setActiveTab('stock'); setIsMenuOpen(false);}} />
           <NavItem icon={<Database />} label="Configuración" active={activeTab === 'config'} onClick={() => {setActiveTab('config'); setIsMenuOpen(false);}} />
           <button onClick={() => {setActiveTab('add'); setIsMenuOpen(false);}} className={`mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all ${activeTab === 'add' ? 'bg-indigo-600 text-white shadow-xl' : 'bg-indigo-600/10 text-indigo-400 hover:bg-indigo-600/20'}`}>
-            <Plus /> Nueva Venta
+            <Plus /> Nuevo Movimiento
           </button>
         </div>
 
@@ -101,9 +103,20 @@ const App: React.FC = () => {
 
       <main className="flex-1 p-4 md:p-8 overflow-y-auto custom-scrollbar text-slate-900">
         {activeTab === 'dashboard' && <DashboardSection stats={stats} />}
-        {activeTab === 'config' && <ConfigSection config={config} setConfig={setConfig} onUpdateList={updateConfigList} onSync={fetchFromCloud} onDownloadBackup={downloadBackup} isSyncing={isSyncing} />}
+        {activeTab === 'config' && (
+          <ConfigSection 
+            config={config} 
+            setConfig={setConfig} 
+            onUpdateList={updateConfigList} 
+            onSync={fetchFromCloud} 
+            onDownloadBackup={downloadBackup} 
+            onImport={importTransactions}
+            onClear={clearTransactions}
+            isSyncing={isSyncing} 
+          />
+        )}
         {activeTab === 'add' && <TransactionFormSection onAdd={addTransaction} products={products} config={config} isSyncing={isSyncing} onComplete={() => setActiveTab('produccion')} />}
-        {activeTab === 'ventas' && <HistorySection transactions={transactions} config={config} onSync={fetchFromCloud} />}
+        {activeTab === 'ventas' && <HistorySection transactions={transactions} config={config} onSync={fetchFromCloud} onImport={importTransactions} />}
         {activeTab === 'stock' && <InventorySection stocks={currentStocks} onEdit={setEditingStock} onAddProduct={() => setIsNewProductModalOpen(true)} />}
         {activeTab === 'logistica' && <LogisticsSection transactions={transactions} onUpdate={updateTransaction} onMove={updateTransactionEtapa} onEdit={(tx) => { setLogisticsTx(tx); setIsEditingLogistics(true); }} />}
         {activeTab === 'produccion' && (
@@ -174,15 +187,34 @@ const DashboardSection: React.FC<{ stats: any }> = ({ stats }) => (
   <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500">
     <header><h2 className="text-3xl font-bold text-slate-800 tracking-tight">Panel de Control</h2><p className="text-slate-500">Gestión Integral LaserBeam CRM</p></header>
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-      <StatCard label="Ingresos" value={`$${formatCurrency(stats.income)}`} icon={<TrendingUp className="text-emerald-500" />} color="emerald" />
-      <StatCard label="Egresos" value={`$${formatCurrency(stats.expense)}`} icon={<TrendingUp className="rotate-180 text-rose-500" />} color="rose" />
-      <StatCard label="Utilidad" value={`$${formatCurrency(stats.balance)}`} icon={<LayoutDashboard className="text-blue-500" />} color="blue" subText={`${stats.margin.toFixed(1)}% margen`} />
+      <StatCard 
+        label="Ingresos (7 días)" 
+        value={`$${formatCurrency(stats.income)}`} 
+        totalValue={`Mes: $${formatCurrency(stats.monthlyIncome)} | 30d: $${formatCurrency(stats.last30DaysIncome)}`}
+        icon={<TrendingUp className="text-emerald-500" />} 
+        color="emerald" 
+      />
+      <StatCard 
+        label="Egresos (7 días)" 
+        value={`$${formatCurrency(stats.expense)}`} 
+        totalValue={`Mes: $${formatCurrency(stats.monthlyExpense)} | 30d: $${formatCurrency(stats.last30DaysExpense)}`}
+        icon={<TrendingUp className="rotate-180 text-rose-500" />} 
+        color="rose" 
+      />
+      <StatCard 
+        label="Utilidad (7 días)" 
+        value={`$${formatCurrency(stats.balance)}`} 
+        totalValue={`Total: $${formatCurrency(stats.totalBalance)}`}
+        icon={<LayoutDashboard className="text-blue-500" />} 
+        color="blue" 
+        subText={`${stats.margin.toFixed(1)}% margen`} 
+      />
       <StatCard label="Bajo Stock" value={stats.lowStockItems.length.toString()} icon={<Package className="text-rose-500" />} color="rose" />
     </div>
 
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
       <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm">
-        <h3 className="text-lg font-bold text-slate-800 mb-6">Ventas Semanales</h3>
+        <h3 className="text-lg font-bold text-slate-800 mb-6">Ventas (Últimos 7 Días)</h3>
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={stats.last7Days}>
@@ -196,58 +228,76 @@ const DashboardSection: React.FC<{ stats: any }> = ({ stats }) => (
         </div>
       </div>
 
-      <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm">
-        <h3 className="text-lg font-bold text-slate-800 mb-6">Evolución de Ingresos</h3>
-        <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={stats.last7Days}>
-              <defs>
-                <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
-                  <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
-              <YAxis hide />
-              <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} formatter={(val: any) => `$${formatCurrency(val || 0)}`} />
-              <Area type="monotone" dataKey="income" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorIncome)" />
-            </AreaChart>
-          </ResponsiveContainer>
+      <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden">
+        <h3 className="text-lg font-bold text-slate-800 mb-6">Últimos Movimientos</h3>
+        <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+          {stats.recentTransactions?.map((tx: any) => (
+            <div key={tx.id} className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 border border-slate-100 transition-all hover:bg-slate-100">
+              <div className="flex items-center gap-4">
+                <div className={`p-2 rounded-xl ${tx.tipo === 'Ingreso' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
+                  {tx.tipo === 'Ingreso' ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
+                </div>
+                <div className="min-w-0">
+                  <p className="font-semibold text-slate-800 truncate max-w-[120px] sm:max-w-[200px]">{tx.detalle || tx.imputable}</p>
+                  <p className="text-[10px] text-slate-500">{tx.fecha} • {tx.proveedor || tx.cliente || 'Varios'}</p>
+                </div>
+              </div>
+              <p className={`font-bold text-sm ${tx.tipo === 'Ingreso' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                {tx.tipo === 'Ingreso' ? '+' : '-'}${formatCurrency(tx.total)}
+              </p>
+            </div>
+          ))}
+          {(!stats.recentTransactions || stats.recentTransactions.length === 0) && (
+            <div className="text-center py-12">
+              <div className="bg-slate-50 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3">
+                <LayoutDashboard className="text-slate-300" size={24} />
+              </div>
+              <p className="text-slate-500 text-sm">No hay movimientos recientes</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
   </div>
 );
 
-const HistorySection: React.FC<{ transactions: Transaction[], config: any, onSync: () => void }> = ({ transactions, config, onSync }) => {
+const HistorySection: React.FC<{ transactions: Transaction[], config: any, onSync: () => void, onImport: (txs: Transaction[]) => void }> = ({ transactions, config, onSync, onImport }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('Todos');
   const [vendorFilter, setVendorFilter] = useState('Todos');
+  const [proveedorFilter, setProveedorFilter] = useState('Todos');
+  const [isMPImporterOpen, setIsMPImporterOpen] = useState(false);
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter(tx => {
-      const contact = tx.tipo === 'Ingreso' ? (tx.cliente || '') : (tx.proveedor || '');
-      const itemSkus = tx.items?.map(i => i.sku).join(' ') || tx.sku;
+      const itemSkus = String(tx.items?.map(i => i.sku).join(' ') || tx.sku || '');
       const matchesSearch = 
-        tx.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        tx.numeroOrden.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        contact.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        String(tx.id || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        String(tx.numeroOrden || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        String(tx.cliente || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        String(tx.proveedor || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         itemSkus.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        tx.cuenta.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        tx.imputable.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        tx.detalle.toLowerCase().includes(searchTerm.toLowerCase());
+        String(tx.cuenta || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        String(tx.imputable || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        String(tx.detalle || '').toLowerCase().includes(searchTerm.toLowerCase());
       const matchesType = typeFilter === 'Todos' || tx.tipo === typeFilter;
       const matchesVendor = vendorFilter === 'Todos' || tx.vendedor === vendorFilter;
-      return matchesSearch && matchesType && matchesVendor;
+      const matchesProveedor = proveedorFilter === 'Todos' || tx.proveedor === proveedorFilter;
+      return matchesSearch && matchesType && matchesVendor && matchesProveedor;
     });
-  }, [transactions, searchTerm, typeFilter, vendorFilter]);
+  }, [transactions, searchTerm, typeFilter, vendorFilter, proveedorFilter]);
 
   return (
     <div className="max-w-full space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
         <h2 className="text-2xl font-bold text-slate-800">Movimientos</h2>
         <div className="flex gap-2">
+          <button 
+            onClick={() => setIsMPImporterOpen(true)}
+            className="px-4 py-2 bg-indigo-50 border border-indigo-100 rounded-xl text-xs font-bold text-indigo-600 hover:bg-indigo-100 transition-all flex items-center gap-2"
+          >
+            <Download className="w-4 h-4" /> Importar Mercado Pago
+          </button>
           <button 
             onClick={onSync}
             className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all flex items-center gap-2"
@@ -256,6 +306,17 @@ const HistorySection: React.FC<{ transactions: Transaction[], config: any, onSyn
           </button>
         </div>
       </div>
+
+      {isMPImporterOpen && (
+        <MercadoPagoImporter 
+          onClose={() => setIsMPImporterOpen(false)}
+          onImport={(txs) => {
+            onImport(txs);
+            setIsMPImporterOpen(false);
+          }}
+          paymentMethods={config.paymentMethods}
+        />
+      )}
       
       <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm flex flex-wrap gap-4 items-end">
         <div className="flex-1 min-w-[200px] space-y-1">
@@ -277,51 +338,86 @@ const HistorySection: React.FC<{ transactions: Transaction[], config: any, onSyn
             {config.vendors.map((v: string) => <option key={v} value={v}>{v}</option>)}
           </select>
         </div>
+        <div className="space-y-1">
+          <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Proveedor</label>
+          <select value={proveedorFilter} onChange={(e) => setProveedorFilter(e.target.value)} className="p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="Todos">Todos</option>
+            {config.suppliers.map((s: string) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
       </div>
 
-      <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden overflow-x-auto custom-scrollbar">
-        <table className="w-full text-left min-w-[1500px]">
-          <thead className="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest">
+      <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-x-scroll custom-scrollbar relative" style={{ maxHeight: '70vh' }}>
+        <table className="w-full text-left min-w-[1500px] border-collapse">
+          <thead className="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest sticky top-0 z-20 shadow-sm">
             <tr>
-              <th className="px-6 py-5">ID</th>
-              <th className="px-6 py-5">OT</th>
-              <th className="px-6 py-5">Fecha</th>
-              <th className="px-6 py-5">Tipo</th>
-              <th className="px-6 py-5">Cuenta</th>
-              <th className="px-6 py-5">Imputable</th>
-              <th className="px-6 py-5">SKU</th>
-              <th className="px-6 py-5">Concepto</th>
-              <th className="px-6 py-5 text-right">Monto</th>
-              <th className="px-6 py-5">Unid</th>
-              <th className="px-6 py-5">Estado</th>
-              <th className="px-6 py-5">Medio Pago</th>
-              <th className="px-6 py-5">Vendedor</th>
-              <th className="px-6 py-5">Contacto</th>
-              <th className="px-6 py-5">Detalle</th>
+              <th className="px-6 py-5 bg-slate-50">ID</th>
+              <th className="px-6 py-5 bg-slate-50">OT</th>
+              <th className="px-6 py-5 bg-slate-50">Fecha</th>
+              <th className="px-6 py-5 bg-slate-50">Tipo</th>
+              <th className="px-6 py-5 bg-slate-50">Cuenta</th>
+              <th className="px-6 py-5 bg-slate-50">Imputable</th>
+              <th className="px-6 py-5 bg-slate-50">SKU</th>
+              <th className="px-6 py-5 bg-slate-50">Concepto</th>
+              <th className="px-6 py-5 bg-slate-50 text-right">Monto</th>
+              <th className="px-6 py-5 bg-slate-50">Unid</th>
+              <th className="px-6 py-5 bg-slate-50">Estado</th>
+              <th className="px-6 py-5 bg-slate-50">Medio Pago</th>
+              <th className="px-6 py-5 bg-slate-50">Vendedor</th>
+              <th className="px-6 py-5 bg-slate-50">Cliente</th>
+              <th className="px-6 py-5 bg-slate-50">Proveedor</th>
+              <th className="px-6 py-5 bg-slate-50">Detalle</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
-            {filteredTransactions.map(tx => (
-              <tr key={tx.id} className="hover:bg-slate-50 transition-colors text-xs">
-                <td className="px-6 py-4 font-mono text-[10px] text-slate-400">{tx.id}</td>
-                <td className="px-6 py-4"><span className="px-2 py-1 bg-slate-900 text-white text-[10px] font-black rounded-lg">{tx.numeroOrden || '-'}</span></td>
-                <td className="px-6 py-4 font-medium whitespace-nowrap">{tx.fecha}</td>
-                <td className="px-6 py-4"><span className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase ${tx.tipo === 'Ingreso' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>{tx.tipo}</span></td>
-                <td className="px-6 py-4 text-slate-500 font-medium">{tx.cuenta}</td>
-                <td className="px-6 py-4 text-slate-500">{tx.imputable}</td>
-                <td className="px-6 py-4">
-                  {tx.tipo === 'Ingreso' && tx.items ? tx.items.map(i => `${i.unidades}x${i.sku}`).join(', ') : tx.sku}
-                </td>
-                <td className="px-6 py-4 text-slate-500">{tx.concepto}</td>
-                <td className="px-6 py-4 font-black text-slate-900 text-right">${formatCurrency(tx.total)}</td>
-                <td className="px-6 py-4 text-slate-500 font-bold">{tx.unidades}</td>
-                <td className="px-6 py-4"><span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-slate-100">{tx.estado}</span></td>
-                <td className="px-6 py-4 text-slate-500 font-bold">{tx.medioPago}</td>
-                <td className="px-6 py-4 text-slate-500">{tx.vendedor || '-'}</td>
-                <td className="px-6 py-4 font-semibold text-slate-700 whitespace-nowrap">{tx.tipo === 'Ingreso' ? tx.cliente : tx.proveedor}</td>
-                <td className="px-6 py-4 text-slate-400 italic max-w-xs truncate">{tx.detalle}</td>
-              </tr>
-            ))}
+            {filteredTransactions.map(tx => {
+              let displayDate = tx.fecha;
+              if (tx.fecha) {
+                const s = String(tx.fecha).split(' ')[0].trim();
+                const parts = s.split(/[\/\-]/);
+                if (parts.length === 3) {
+                  let d, m, y;
+                  const v0 = parseInt(parts[0]);
+                  const v1 = parseInt(parts[1]);
+                  const v2 = parseInt(parts[2]);
+
+                  if (parts[0].length === 4) { // YYYY-MM-DD
+                    y = v0; m = v1; d = v2;
+                  } else { // DD/MM/YYYY or MM/DD/YYYY
+                    y = v2 < 100 ? 2000 + v2 : v2;
+                    if (v0 > 12) { d = v0; m = v1; }
+                    else if (v1 > 12) { d = v1; m = v0; }
+                    else { 
+                      // Ambiguous. User stated source is MM/DD/YYYY
+                      m = v0; d = v1; 
+                    }
+                  }
+                  displayDate = `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
+                }
+              }
+              return (
+                <tr key={tx.id} className="hover:bg-slate-50 transition-colors text-xs">
+                  <td className="px-6 py-4 font-mono text-[10px] text-slate-400">{tx.id}</td>
+                  <td className="px-6 py-4"><span className="text-slate-900 font-bold">{tx.numeroOrden || '-'}</span></td>
+                  <td className="px-6 py-4 font-medium whitespace-nowrap">{displayDate}</td>
+                  <td className="px-6 py-4"><span className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase ${tx.tipo === 'Ingreso' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>{tx.tipo}</span></td>
+                  <td className="px-6 py-4 text-slate-500 font-medium whitespace-nowrap">{tx.cuenta}</td>
+                  <td className="px-6 py-4 text-slate-500 whitespace-nowrap">{tx.imputable}</td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {tx.tipo === 'Ingreso' && tx.items ? tx.items.map(i => `${i.unidades}x${i.sku}`).join(', ') : tx.sku}
+                  </td>
+                  <td className="px-6 py-4 text-slate-500 whitespace-nowrap">{tx.concepto}</td>
+                  <td className="px-6 py-4 font-black text-slate-900 text-right whitespace-nowrap">${formatCurrency(tx.total)}</td>
+                  <td className="px-6 py-4 text-slate-500 font-bold whitespace-nowrap">{tx.unidades}</td>
+                  <td className="px-6 py-4 whitespace-nowrap"><span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-emerald-50 text-emerald-600">COMPLETADO</span></td>
+                  <td className="px-6 py-4 text-slate-500 font-bold whitespace-nowrap">{tx.medioPago}</td>
+                  <td className="px-6 py-4 text-slate-500 whitespace-nowrap">{tx.vendedor || '-'}</td>
+                  <td className="px-6 py-4 font-semibold text-slate-700 whitespace-nowrap">{tx.cliente || '-'}</td>
+                  <td className="px-6 py-4 font-semibold text-slate-700 whitespace-nowrap">{tx.proveedor || '-'}</td>
+                  <td className="px-6 py-4 text-slate-400 italic whitespace-nowrap" title={tx.detalle}>{tx.detalle}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -377,7 +473,7 @@ const KanbanSection: React.FC<{
   
   const productionTransactions = useMemo(() => {
     return transactions
-      .filter(tx => tx.tipo === 'Ingreso' && tx.estado !== 'Cancelado')
+      .filter(tx => tx.tipo === 'Ingreso' && tx.estado !== 'Cancelado' && !tx.imputable?.toLowerCase().includes('ajuste'))
       .sort((a, b) => (a.prioridad || 0) - (b.prioridad || 0));
   }, [transactions]);
 
@@ -454,7 +550,7 @@ const KanbanSection: React.FC<{
     const f = new FormData(e.currentTarget);
     const updated: Transaction = {
       ...editingTx,
-      fecha: f.get('fecha') as string,
+      fecha: (f.get('fecha') as string) || editingTx.fecha,
       fechaEntrega: f.get('fechaEntrega') as string,
       cliente: f.get('cliente') as string,
       detalle: f.get('detalle') as string,
@@ -463,7 +559,7 @@ const KanbanSection: React.FC<{
       medioPago: f.get('medioPago') as string,
       cuenta: f.get('cuenta') as string,
       imputable: f.get('imputable') as string,
-      concepto: f.get('concepto') as any,
+      concepto: (f.get('concepto') as any) || editingTx.concepto,
       estado: f.get('estado') as any,
       etapa: f.get('etapa') as any,
       items: editItems,
@@ -640,9 +736,14 @@ const KanbanSection: React.FC<{
               <button onClick={() => setEditingTx(null)} className="text-slate-300 hover:text-slate-500 font-black text-xl">✕</button>
             </header>
             <form onSubmit={handleEditSave} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase">Fecha Movimiento</label><input required name="fecha" type="date" defaultValue={editingTx.fecha?.includes('/') ? new Date(editingTx.fecha.split('/').reverse().join('-')).toISOString().split('T')[0] : editingTx.fecha} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl" /></div>
                 <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase">Cliente</label><input required name="cliente" defaultValue={editingTx.cliente} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl" /></div>
                 <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase">Fecha Entrega</label><input required name="fechaEntrega" type="date" defaultValue={editingTx.fechaEntrega} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl" /></div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase">Concepto</label><select name="concepto" defaultValue={editingTx.concepto} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl">{CONCEPTOS.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+                <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase">Vendedor</label><select name="vendedor" defaultValue={editingTx.vendedor} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl">{config.vendors.map(v => <option key={v} value={v}>{v}</option>)}</select></div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase">Cuenta</label><select name="cuenta" value={editingAccount} onChange={(e) => setEditingAccount(e.target.value)} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none">{(editingTx.tipo === 'Ingreso' ? config.accountsIngresos : config.accountsEgresos).map((t: string) => <option key={t} value={t}>{t}</option>)}</select></div>
@@ -933,7 +1034,7 @@ const LogisticsSection: React.FC<{ transactions: Transaction[], onUpdate: (tx: T
                       <div className="flex justify-between items-start mb-3">
                         <div className="space-y-0">
                           <h4 className="text-2xl font-black text-slate-900 tracking-tighter leading-none">{tx.numeroOrden}</h4>
-                          <span className="text-xs font-bold text-slate-500 uppercase tracking-wide truncate block max-w-[140px]">{tx.cliente}</span>
+                          <span className="text-xs font-bold text-slate-500 uppercase tracking-wide truncate block max-w-[140px]">{tx.cliente || tx.proveedor}</span>
                         </div>
                         <div className={`w-2 h-10 rounded-full ${theme.accent} opacity-20`} />
                       </div>
@@ -1113,15 +1214,239 @@ const ConfigSection: React.FC<{
   onUpdateList: (key: keyof Omit<AppConfig, 'sheetUrl'>, list: string[]) => void, 
   onSync: () => void, 
   onDownloadBackup: () => void,
+  onImport: (txs: Transaction[]) => void,
+  onClear: () => void,
   isSyncing: boolean 
-}> = ({ config, setConfig, onUpdateList, onSync, onDownloadBackup, isSyncing }) => {
-  const [activeConfigTab, setActiveConfigTab] = useState<'db' | 'proveedores' | 'pagos' | 'vendedores' | 'categorias'>('db');
+}> = ({ config, setConfig, onUpdateList, onSync, onDownloadBackup, onImport, onClear, isSyncing }) => {
+  const [activeConfigTab, setActiveConfigTab] = useState<'db' | 'proveedores' | 'pagos' | 'vendedores' | 'categorias' | 'importar'>('db');
+  const [importStatus, setImportStatus] = useState('');
+  const [importPreview, setImportPreview] = useState<Transaction[]>([]);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [showImportClearConfirm, setShowImportClearConfirm] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      processData(text);
+    };
+    reader.readAsText(file);
+  };
+
+  const processData = (text: string) => {
+    if (!text.trim()) return;
+    try {
+      const allLines = text.trim().split('\n').filter(l => l.trim());
+      if (allLines.length < 2) throw new Error("Se necesitan al menos 2 filas (encabezado y datos)");
+      
+      // Detect separator more reliably
+      const sample = allLines.slice(0, 5).join('\n');
+      const counts = {
+        '\t': (sample.match(/\t/g) || []).length,
+        ';': (sample.match(/;/g) || []).length,
+        ',': (sample.match(/,/g) || []).length
+      };
+      let sep: '\t' | ';' | ',' = '\t';
+      if (counts[';'] > counts[sep]) sep = ';';
+      if (counts[','] > counts[sep]) sep = ',';
+
+      const splitCSV = (line: string, separator: string) => {
+        const result: string[] = [];
+        let current = '';
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i];
+          if (char === '"') {
+            inQuotes = !inQuotes;
+          } else if (char === separator && !inQuotes) {
+            result.push(current.trim());
+            current = '';
+          } else {
+            current += char;
+          }
+        }
+        result.push(current.trim());
+        return result;
+      };
+
+      const fieldMap: Record<string, string> = {
+        'numeroorden': 'numeroOrden', 'orden': 'numeroOrden', 'ot': 'numeroOrden', 'nro orden': 'numeroOrden', 'nro_orden': 'numeroOrden', 'nro. orden': 'numeroOrden',
+        'fecha': 'fecha', 'date': 'fecha', 'dia': 'fecha',
+        'tipo': 'tipo', 'type': 'tipo', 'clase': 'tipo', 'rubro': 'tipo',
+        'cuenta': 'cuenta', 'account': 'cuenta', 'caja': 'cuenta',
+        'imputable': 'imputable', 'categoria': 'imputable', 'category': 'imputable',
+        'sku': 'sku', 'producto': 'sku', 'product': 'sku', 'item': 'sku', 'codigo': 'sku', 'cod. producto': 'sku',
+        'total': 'total', 'monto': 'total', 'importe': 'total', 'amount': 'total', 'precio': 'total', 'valor': 'total', 'total venta': 'total',
+        'concepto': 'concepto', 'concept': 'concepto', 'motivo': 'concepto',
+        'estado': 'estado', 'status': 'estado', 'situacion': 'estado',
+        'mediopago': 'medioPago', 'pago': 'medioPago', 'medio de pago': 'medioPago', 'payment': 'medioPago', 'forma de pago': 'medioPago', 'medio de pago/cobro': 'medioPago',
+        'unidades': 'unidades', 'cantidad': 'unidades', 'cant': 'unidades', 'quantity': 'unidades', 'qty': 'unidades', 'unidades x pedido': 'unidades',
+        'cliente': 'cliente', 'nombre': 'cliente', 'customer': 'cliente', 'client': 'cliente', 'destinatario': 'cliente', 'proveedor': 'cliente',
+        'vendedor': 'vendedor', 'vendor': 'vendedor', 'seller': 'vendedor', 'comercial': 'vendedor',
+        'detalle': 'detalle', 'observaciones': 'detalle', 'comentarios': 'detalle', 'detail': 'detalle', 'obs': 'detalle', 'descripcion': 'detalle', 'datos detalle': 'detalle',
+        'notas': 'notasProduccion', 'notes': 'notasProduccion', 'notas produccion': 'notasProduccion',
+        'fechaentrega': 'fechaEntrega', 'entrega': 'fechaEntrega', 'fecha de entrega': 'fechaEntrega', 'delivery': 'fechaEntrega', 'pactado': 'fechaEntrega'
+      };
+
+      // Find the best header row
+      let bestHeaderIdx = 0;
+      let maxMatches = -1;
+      
+      for (let i = 0; i < Math.min(10, allLines.length); i++) {
+        const cols = splitCSV(allLines[i], sep).map(c => c.trim().toLowerCase().replace(/^\uFEFF/, ""));
+        const matches = cols.filter(c => fieldMap[c]).length;
+        if (matches > maxMatches) {
+          maxMatches = matches;
+          bestHeaderIdx = i;
+        }
+      }
+
+      const rawHeader = splitCSV(allLines[bestHeaderIdx], sep).map(h => h.trim().toLowerCase().replace(/^\uFEFF/, ""));
+      const dataLines = allLines.slice(bestHeaderIdx + 1);
+      
+      const processed = dataLines.map((line, lineIdx) => {
+        const values = splitCSV(line, sep);
+        const tx: any = { id: `imp_${Date.now()}_${lineIdx}_${Math.random().toString(36).substr(2, 5)}` };
+        
+        rawHeader.forEach((colName, colIdx) => {
+          const val = values[colIdx]?.trim();
+          if (val === undefined || val === '') return;
+
+          const technicalKey = fieldMap[colName] || colName;
+          
+          if (technicalKey === 'total' || technicalKey === 'unidades' || technicalKey === 'prioridad') {
+            let cleanVal = val.replace(/[$]/g, '').trim();
+            if (cleanVal.includes('.') && cleanVal.includes(',')) {
+              if (cleanVal.lastIndexOf('.') < cleanVal.lastIndexOf(',')) {
+                cleanVal = cleanVal.replace(/\./g, '').replace(',', '.');
+              } else {
+                cleanVal = cleanVal.replace(/,/g, '');
+              }
+            } else if (cleanVal.includes(',')) {
+              const parts = cleanVal.split(',');
+              if (parts[parts.length - 1].length === 2) {
+                cleanVal = cleanVal.replace(',', '.');
+              } else {
+                cleanVal = cleanVal.replace(/,/g, '');
+              }
+            } else if (cleanVal.includes('.')) {
+              const parts = cleanVal.split('.');
+              if (parts[parts.length - 1].length === 3) {
+                cleanVal = cleanVal.replace(/\./g, '');
+              }
+            }
+            const num = Number(cleanVal);
+            tx[technicalKey] = isNaN(num) ? 0 : num;
+          } else if (technicalKey === 'fecha' || technicalKey === 'fechaEntrega') {
+            // Database import from Google Sheets is MM/DD/YYYY
+            const s = val.split(' ')[0].trim();
+            const parts = s.split(/[\/\-]/);
+            if (parts.length === 3) {
+              let d, m, y;
+              const v0 = parts[0];
+              const v1 = parts[1];
+              const v2 = parts[2];
+              if (v0.length === 4) { // YYYY-MM-DD
+                tx[technicalKey] = `${v0}-${v1.padStart(2, '0')}-${v2.padStart(2, '0')}`;
+              } else {
+                // MM/DD/YYYY
+                y = v2.length === 2 ? '20' + v2 : v2;
+                m = v0.padStart(2, '0');
+                d = v1.padStart(2, '0');
+                tx[technicalKey] = `${y}-${m}-${d}`;
+              }
+            } else {
+              tx[technicalKey] = val;
+            }
+          } else if (technicalKey === 'tipo') {
+            const lowerVal = val.toLowerCase();
+            if (lowerVal.includes('egreso') || lowerVal.includes('gasto')) tx.tipo = 'Egreso';
+            else if (lowerVal.includes('ingreso') || lowerVal.includes('venta')) tx.tipo = 'Ingreso';
+            else tx.tipo = 'Ingreso';
+          } else if (technicalKey === 'concepto') {
+            const lowerVal = val.toLowerCase();
+            if (lowerVal.includes('seña')) tx.concepto = 'Seña';
+            else if (lowerVal.includes('saldo')) tx.concepto = 'Saldo';
+            else if (lowerVal.includes('total')) tx.concepto = 'Total';
+            else tx.concepto = 'Total';
+          } else if (technicalKey === 'items') {
+            try {
+              if (val.startsWith('[')) {
+                tx[technicalKey] = JSON.parse(val);
+              } else {
+                tx[technicalKey] = val.split(',').map(item => {
+                  const parts = item.trim().split('x');
+                  if (parts.length === 2) {
+                    return { sku: parts[1].trim(), unidades: parseInt(parts[0]) || 1 };
+                  }
+                  return { sku: item.trim(), unidades: 1 };
+                });
+              }
+            } catch (e) { console.warn("Error parsing items", e); }
+          } else {
+            tx[technicalKey] = val;
+          }
+        });
+
+        if (!tx.fecha) tx.fecha = new Date().toISOString().split('T')[0];
+        if (!tx.tipo) tx.tipo = 'Ingreso';
+        if (!tx.estado) tx.estado = 'Completado';
+        if (tx.total === undefined) tx.total = 0;
+        if (tx.unidades === undefined) tx.unidades = 1;
+        tx.prioridad = Date.now() + lineIdx;
+
+        return tx as Transaction;
+      });
+
+      const clientsWithTotal = new Set(
+        processed
+          .filter(tx => tx.tipo === 'Ingreso' && tx.concepto === 'Total')
+          .map(tx => tx.cliente?.toLowerCase().trim())
+      );
+
+      const finalProcessed = processed
+        .filter(tx => tx.numeroOrden || tx.cliente || tx.total > 0)
+        .map(tx => {
+          if (tx.tipo === 'Ingreso') {
+            const clientKey = tx.cliente?.toLowerCase().trim();
+            if (tx.concepto === 'Total' || (tx.concepto === 'Seña' && clientsWithTotal.has(clientKey))) {
+              tx.etapa = 'Completado';
+              tx.estado = 'Completado';
+            } else {
+              tx.etapa = 'Máquina/Producción';
+              tx.estado = 'Pendiente';
+            }
+          }
+          return tx;
+        });
+
+      if (finalProcessed.length === 0) throw new Error("No se encontraron datos válidos. Verifica que los títulos de las columnas coincidan.");
+
+      setImportPreview(finalProcessed);
+      setImportStatus(`Se detectaron ${finalProcessed.length} registros. Revisa la vista previa abajo.`);
+    } catch (e: any) {
+      setImportStatus(`Error al procesar: ${e.message}`);
+    }
+  };
+
+  const handleConfirmImport = () => {
+    if (importPreview.length === 0) return;
+    onImport(importPreview);
+    setImportStatus(`Éxito: ${importPreview.length} registros importados.`);
+    setImportPreview([]);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500">
       <header className="flex justify-between items-end"><div><h2 className="text-3xl font-bold text-slate-800 tracking-tight">Configuración</h2></div><button onClick={onSync} disabled={isSyncing} className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-2xl font-bold shadow-lg">{isSyncing ? '...' : 'Refrescar Datos'}</button></header>
       <div className="flex gap-2 overflow-x-auto pb-2">
         <ConfigTab label="Base de Datos" active={activeConfigTab === 'db'} onClick={() => setActiveConfigTab('db')} />
+        <ConfigTab label="Importar" active={activeConfigTab === 'importar'} onClick={() => setActiveConfigTab('importar')} />
         <ConfigTab label="Proveedores" active={activeConfigTab === 'proveedores'} onClick={() => setActiveConfigTab('proveedores')} />
         <ConfigTab label="Pagos" active={activeConfigTab === 'pagos'} onClick={() => setActiveConfigTab('pagos')} />
         <ConfigTab label="Vendedores" active={activeConfigTab === 'vendedores'} onClick={() => setActiveConfigTab('vendedores')} />
@@ -1137,7 +1462,122 @@ const ConfigSection: React.FC<{
                 <button onClick={onDownloadBackup} className="flex-1 py-4 bg-slate-900 text-white rounded-2xl font-bold hover:bg-slate-800 transition-all flex items-center justify-center gap-2">
                   <Download className="w-5 h-5" /> Descargar Respaldo (JSON)
                 </button>
+                {showClearConfirm ? (
+                  <div className="flex-1 flex gap-2">
+                    <button onClick={() => { onClear(); setShowClearConfirm(false); }} className="flex-1 py-4 bg-rose-600 text-white rounded-2xl font-bold hover:bg-rose-700 transition-all">
+                      Confirmar Borrado
+                    </button>
+                    <button onClick={() => setShowClearConfirm(false)} className="px-6 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold hover:bg-slate-200 transition-all">
+                      Cancelar
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={() => setShowClearConfirm(true)} className="flex-1 py-4 bg-rose-50 text-rose-600 rounded-2xl font-bold hover:bg-rose-100 transition-all">
+                    Limpiar Base de Datos
+                  </button>
+                )}
               </div>
+            </div>
+          </div>
+        )}
+        {activeConfigTab === 'importar' && (
+          <div className="space-y-4">
+            <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h3 className="font-bold">Importar Base de Datos (CSV)</h3>
+                  <p className="text-slate-500 text-xs">
+                    Sube el archivo CSV exportado de Google Sheets. El sistema detectará automáticamente las columnas.
+                  </p>
+                </div>
+                {showImportClearConfirm ? (
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => { onClear(); setShowImportClearConfirm(false); }}
+                      className="px-4 py-2 bg-rose-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-rose-700 transition-all"
+                    >
+                      Confirmar
+                    </button>
+                    <button 
+                      onClick={() => setShowImportClearConfirm(false)}
+                      className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase hover:bg-slate-200 transition-all"
+                    >
+                      X
+                    </button>
+                  </div>
+                ) : (
+                  <button 
+                    onClick={() => setShowImportClearConfirm(true)}
+                    className="px-4 py-2 bg-rose-50 text-rose-600 rounded-xl text-[10px] font-black uppercase hover:bg-rose-100 transition-all"
+                  >
+                    Limpiar Base Actual
+                  </button>
+                )}
+              </div>
+              
+              <div className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-3xl p-12 bg-slate-50 hover:bg-slate-100 transition-all cursor-pointer relative group" onClick={() => fileInputRef.current?.click()}>
+                <input 
+                  type="file" 
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                  accept=".csv,.txt"
+                  className="hidden"
+                />
+                <div className="bg-white p-4 rounded-2xl shadow-sm mb-4 group-hover:scale-110 transition-transform">
+                  <Database className="w-8 h-8 text-indigo-600" />
+                </div>
+                <p className="font-bold text-slate-800">Haz clic para seleccionar el archivo CSV</p>
+                <p className="text-xs text-slate-400 mt-2">Formato esperado: MM/DD/YYYY para fechas</p>
+              </div>
+              
+              <div className="mt-6 flex gap-4">
+                {importPreview.length > 0 && (
+                  <button 
+                    onClick={handleConfirmImport}
+                    className="flex-1 py-4 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg hover:bg-emerald-700 transition-all animate-in zoom-in duration-300"
+                  >
+                    Confirmar Importación ({importPreview.length} registros)
+                  </button>
+                )}
+              </div>
+              
+              {importStatus && (
+                <p className={`mt-4 text-sm font-bold ${importStatus.startsWith('Error') ? 'text-rose-600' : 'text-emerald-600'}`}>
+                  {importStatus}
+                </p>
+              )}
+
+              {importPreview.length > 0 && (
+                <div className="mt-8 overflow-x-auto border border-slate-100 rounded-2xl">
+                  <table className="w-full text-[10px] text-left">
+                    <thead className="bg-slate-50 font-black uppercase text-slate-400">
+                      <tr>
+                        <th className="p-3">OT</th>
+                        <th className="p-3">Fecha</th>
+                        <th className="p-3">Cliente</th>
+                        <th className="p-3">SKU</th>
+                        <th className="p-3">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {importPreview.slice(0, 10).map((tx, i) => (
+                        <tr key={i}>
+                          <td className="p-3 font-bold">{tx.numeroOrden}</td>
+                          <td className="p-3">{tx.fecha}</td>
+                          <td className="p-3">{tx.cliente}</td>
+                          <td className="p-3">{tx.sku}</td>
+                          <td className="p-3 font-black">${tx.total}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {importPreview.length > 10 && (
+                    <div className="p-3 text-center bg-slate-50 text-slate-400 italic">
+                      Y {importPreview.length - 10} registros más...
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1195,12 +1635,30 @@ const EditStockModal: React.FC<{ sku: string, currentQty: number, currentMin: nu
   );
 };
 
-const StatCard: React.FC<{ label: string, value: string, icon: React.ReactNode, color: string, subText?: string }> = ({ label, value, icon, color, subText }) => (
-  <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col gap-2 relative overflow-hidden transition-all hover:translate-y-[-4px]">
-    <div className="flex justify-between items-center"><span className="text-slate-500 text-[10px] font-black uppercase">{label}</span><div className={`p-3 bg-${color}-50 rounded-2xl`}>{icon}</div></div>
-    <span className="text-3xl font-black text-slate-800 tracking-tighter">{value}</span>
-    {subText && <span className="text-[10px] font-bold text-slate-400 uppercase">{subText}</span>}
-  </div>
-);
+const StatCard: React.FC<{ label: string, value: string, totalValue?: string, icon: React.ReactNode, color: string, subText?: string }> = ({ label, value, totalValue, icon, color, subText }) => {
+  const colorMap: Record<string, string> = {
+    emerald: 'bg-emerald-50',
+    rose: 'bg-rose-50',
+    blue: 'bg-blue-50',
+    indigo: 'bg-indigo-50',
+    slate: 'bg-slate-50'
+  };
+
+  return (
+    <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col gap-2 relative overflow-hidden transition-all hover:translate-y-[-4px]">
+      <div className="flex justify-between items-center">
+        <span className="text-slate-500 text-[10px] font-black uppercase">{label}</span>
+        <div className={`p-3 ${colorMap[color] || 'bg-slate-50'} rounded-2xl`}>{icon}</div>
+      </div>
+      <span className="text-3xl font-black text-slate-800 tracking-tighter">{value}</span>
+      {totalValue && (
+        <div className="text-[10px] font-bold text-slate-400">
+          Total Acumulado: <span className="text-slate-600">{totalValue}</span>
+        </div>
+      )}
+      {subText && <span className="text-[10px] font-bold text-slate-400 uppercase">{subText}</span>}
+    </div>
+  );
+};
 
 export default App;

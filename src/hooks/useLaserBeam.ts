@@ -179,33 +179,140 @@ export const useLaserBeam = () => {
   }, [transactions, baseStocks, products]);
 
   const stats = useMemo(() => {
-    const incomeRaw = transactions
-      .filter(t => t.tipo === 'Ingreso' && t.estado !== 'Cancelado' && isConfirmed(t.etapa))
-      .reduce((acc, curr) => acc + curr.total, 0);
-    
-    const expenseRaw = transactions
-      .filter(t => t.tipo === 'Egreso' && t.estado !== 'Cancelado')
-      .reduce((acc, curr) => acc + curr.total, 0);
+    const parseDateToISO = (dateStr: string): string => {
+      if (!dateStr) return '';
+      // Remove time if present and trim
+      const s = String(dateStr).split(' ')[0].trim();
+      
+      // YYYY-MM-DD (with or without leading zeros)
+      const ymdMatch = s.match(/^(\d{4})[\-\/](\d{1,2})[\-\/](\d{1,2})$/);
+      if (ymdMatch) {
+        return `${ymdMatch[1]}-${ymdMatch[2].padStart(2, '0')}-${ymdMatch[3].padStart(2, '0')}`;
+      }
 
-    const income = Math.round(incomeRaw * 100) / 100;
-    const expense = Math.round(expenseRaw * 100) / 100;
+      const parts = s.split(/[\/\-]/);
+      if (parts.length !== 3) return s;
+
+      let d, m, y;
+      const v0 = parseInt(parts[0]);
+      const v1 = parseInt(parts[1]);
+      const v2 = parseInt(parts[2]);
+
+      if (parts[0].length === 4) { // YYYY-MM-DD or YYYY-DD-MM
+        y = v0;
+        if (v1 > 12) { d = v1; m = v2; }
+        else { m = v1; d = v2; }
+      } else { // DD/MM/YYYY or MM/DD/YYYY
+        y = v2 < 100 ? 2000 + v2 : v2;
+        if (v0 > 12) { d = v0; m = v1; }
+        else if (v1 > 12) { d = v1; m = v0; }
+        else {
+          // Ambiguous. User stated source is MM/DD/YYYY
+          m = v0; d = v1;
+        }
+      }
+
+      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    };
+
+    const isInternalTransfer = (t: Transaction) => t.imputable?.toLowerCase().includes('ajuste');
 
     const last7Days = Array.from({ length: 7 }, (_, i) => {
       const d = new Date();
+      // Use local date to avoid UTC shifts
+      d.setHours(0, 0, 0, 0);
       d.setDate(d.getDate() - (6 - i));
-      const dateStr = d.toISOString().split('T')[0];
+      
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
+      
       const dailyIncomeRaw = transactions
-        .filter(t => t.tipo === 'Ingreso' && t.fecha === dateStr && t.estado !== 'Cancelado' && isConfirmed(t.etapa))
+        .filter(t => t.tipo === 'Ingreso' && parseDateToISO(t.fecha) === dateStr && t.estado !== 'Cancelado' && isConfirmed(t.etapa) && !isInternalTransfer(t))
         .reduce((acc, curr) => acc + curr.total, 0);
-      return { name: dateStr.slice(-5), income: Math.round(dailyIncomeRaw * 100) / 100 };
+
+      const dailyExpenseRaw = transactions
+        .filter(t => t.tipo === 'Egreso' && parseDateToISO(t.fecha) === dateStr && t.estado !== 'Cancelado' && !isInternalTransfer(t))
+        .reduce((acc, curr) => acc + curr.total, 0);
+      
+      const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+      return { 
+        name: days[d.getDay()], 
+        income: Math.round(dailyIncomeRaw * 100) / 100,
+        expense: Math.round(dailyExpenseRaw * 100) / 100,
+        date: dateStr
+      };
     });
 
+    const weeklyIncome = last7Days.reduce((acc, curr) => acc + curr.income, 0);
+    const weeklyExpense = last7Days.reduce((acc, curr) => acc + curr.expense, 0);
+
+    const totalIncomeRaw = transactions
+      .filter(t => t.tipo === 'Ingreso' && t.estado !== 'Cancelado' && isConfirmed(t.etapa) && !isInternalTransfer(t))
+      .reduce((acc, curr) => acc + curr.total, 0);
+    
+    const totalExpenseRaw = transactions
+      .filter(t => t.tipo === 'Egreso' && t.estado !== 'Cancelado' && !isInternalTransfer(t))
+      .reduce((acc, curr) => acc + curr.total, 0);
+
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    const monthlyIncomeRaw = transactions
+      .filter(t => {
+        const iso = parseDateToISO(t.fecha);
+        if (!iso) return false;
+        const [y, m] = iso.split('-').map(Number);
+        return y === currentYear && (m - 1) === currentMonth && t.tipo === 'Ingreso' && t.estado !== 'Cancelado' && isConfirmed(t.etapa) && !isInternalTransfer(t);
+      })
+      .reduce((acc, curr) => acc + curr.total, 0);
+
+    const monthlyExpenseRaw = transactions
+      .filter(t => {
+        const iso = parseDateToISO(t.fecha);
+        if (!iso) return false;
+        const [y, m] = iso.split('-').map(Number);
+        return y === currentYear && (m - 1) === currentMonth && t.tipo === 'Egreso' && t.estado !== 'Cancelado' && !isInternalTransfer(t);
+      })
+      .reduce((acc, curr) => acc + curr.total, 0);
+
+    const last30DaysIncomeRaw = transactions
+      .filter(t => {
+        const iso = parseDateToISO(t.fecha);
+        if (!iso) return false;
+        const date = new Date(iso);
+        const diff = (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24);
+        return diff <= 30 && t.tipo === 'Ingreso' && t.estado !== 'Cancelado' && isConfirmed(t.etapa) && !isInternalTransfer(t);
+      })
+      .reduce((acc, curr) => acc + curr.total, 0);
+
+    const last30DaysExpenseRaw = transactions
+      .filter(t => {
+        const iso = parseDateToISO(t.fecha);
+        if (!iso) return false;
+        const date = new Date(iso);
+        const diff = (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24);
+        return diff <= 30 && t.tipo === 'Egreso' && t.estado !== 'Cancelado' && !isInternalTransfer(t);
+      })
+      .reduce((acc, curr) => acc + curr.total, 0);
+
     return { 
-      income, expense, balance: Math.round((income - expense) * 100) / 100, 
+      income: Math.round(weeklyIncome * 100) / 100, 
+      expense: Math.round(weeklyExpense * 100) / 100, 
+      balance: Math.round((weeklyIncome - weeklyExpense) * 100) / 100,
+      totalIncome: Math.round(totalIncomeRaw * 100) / 100,
+      totalExpense: Math.round(totalExpenseRaw * 100) / 100,
+      totalBalance: Math.round((totalIncomeRaw - totalExpenseRaw) * 100) / 100,
+      monthlyIncome: Math.round(monthlyIncomeRaw * 100) / 100,
+      monthlyExpense: Math.round(monthlyExpenseRaw * 100) / 100,
+      last30DaysIncome: Math.round(last30DaysIncomeRaw * 100) / 100,
+      last30DaysExpense: Math.round(last30DaysExpenseRaw * 100) / 100,
       lowStockItems: currentStocks.filter(s => s.cantidad <= s.minStock),
       last7Days,
       monthlySales: [],
-      margin: income > 0 ? ((income - expense) / income) * 100 : 0
+      margin: weeklyIncome > 0 ? ((weeklyIncome - weeklyExpense) / weeklyIncome) * 100 : 0
     };
   }, [transactions, currentStocks]);
 
@@ -279,6 +386,39 @@ export const useLaserBeam = () => {
       await updateConfigInApi(c);
     }, 
     updateConfigList, 
+    importTransactions: async (txs: Transaction[]) => {
+      setIsSyncing(true);
+      try {
+        const response = await fetch('/api/importTransactions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transactions: txs })
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        await fetchData();
+      } catch (e: any) {
+        console.error("Error al importar:", e);
+      } finally {
+        setIsSyncing(false);
+      }
+    },
+    clearTransactions: async () => {
+      setIsSyncing(true);
+      setTransactions([]); // Clear locally immediately
+      try {
+        const response = await fetch('/api/clearTransactions', { method: 'POST' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        
+        // Small delay to ensure server-side write is fully complete and visible
+        await new Promise(resolve => setTimeout(resolve, 500));
+        await fetchData();
+      } catch (e: any) {
+        console.error("Error al limpiar:", e);
+        await fetchData(); // Restore if failed
+      } finally {
+        setIsSyncing(false);
+      }
+    },
     fetchFromCloud: fetchData, 
     testConnection: async () => ({ success: true, message: 'Conectado al servidor local' }),
     initializeCloud: async () => ({ success: true, message: 'Base de datos local activa' }),
